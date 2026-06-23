@@ -1,0 +1,46 @@
+diff --git a/src/utils/helpers.py b/src/utils/helpers.py
+new file mode 100644
+index 0000000..8f3d9a2
+--- /dev/null
++++ b/src/utils/helpers.py
+@@ -0,0 +1,14 @@
++"""Miscellaneous helper functions used across the project."""
++
++from datetime import datetime
++
++
++def format_timestamp(ts: float, fmt: str = "%Y-%m-%d %H:%M") -> str:
++    """Convert a Unix timestamp to a human-readable string.
++
++    Args:
++        ts: Unix timestamp in seconds.
++        fmt: Desired output format (strftime-compatible).
++    """
++    return datetime.utcfromtimestamp(ts).strftime(fmt)
++
++
++def slugify(text: str) -> str:
++    """Create a URL-friendly slug from arbitrary text."""
++    return text.lower().strip().replace(" ", "-")
+diff --git a/src/main.py b/src/main.py
+index a1b2c3d..e4f5g6h 100644
+--- a/src/main.py
++++ b/src/main.py
+@@ -1,6 +1,7 @@
+ import os
+ import sys
+
++from utils.helpers import format_timestamp
+ from utils.logger import get_logger
+
+ logger = get_logger(__name__)
+@@ -12,8 +13,8 @@ def run():
+     config = load_config()
+     started_at = time.time()
+     logger.info("Application started")
+-    print(f"Started at: {started_at}")
++    print(f"Started at: {format_timestamp(started_at)}")
+     process(config)
+-    logger.info("Application finished")
++    logger.info(f"Application finished in {time.time() - started_at:.2f}s")
+     return 0
