@@ -2,24 +2,31 @@
 
 
 def audit(collect_output: dict, parse_output: dict, summarize_output: dict) -> bool:
-    what_changed = summarize_output.get("what_changed", "")
-    if len(what_changed) < 10:
-        raise ValueError("Audit failed: what_changed is too short or missing")
+    summary = summarize_output.get("summary")
+    if not isinstance(summary, str) or len(summary) < 10:
+        raise ValueError("Audit failed: required field 'summary' is missing or empty")
+
+    changes = summarize_output.get("changes")
+    if not isinstance(changes, list) or len(changes) == 0:
+        raise ValueError("Audit failed: required field 'changes' is missing or empty")
 
     files_touched = summarize_output.get("files_touched")
     if not isinstance(files_touched, list) or len(files_touched) == 0:
-        raise ValueError("Audit failed: files_touched is missing or empty")
+        raise ValueError("Audit failed: required field 'files_touched' is missing or empty")
 
-    real_files = set(parse_output.get("files_changed", []))
-    claimed_files = set(files_touched)
-    if not real_files & claimed_files:
+    real = set(parse_output["files_changed"])
+    claimed = set(files_touched)
+    if not real & claimed:
         raise ValueError(
             "Audit failed: LLM hallucinated files.\n"
-            f" Real files: {parse_output.get('files_changed', [])}\n"
-            f" LLM claimed: {files_touched}"
+            f" Real files: {list(real)}\n"
+            f" LLM claimed: {list(claimed)}"
         )
 
+    if any(len(str(item)) < 5 for item in changes):
+        raise ValueError("Audit failed: changes list contains items that are too short")
+
     if parse_output.get("lines_added", 0) + parse_output.get("lines_removed", 0) <= 0:
-        raise ValueError("Audit failed: no lines added or removed")
+        raise ValueError("Audit failed: no actual line changes detected in diff")
 
     return True
