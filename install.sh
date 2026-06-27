@@ -10,7 +10,7 @@ if [ -d "$INSTALL_DIR" ]; then
   cd "$INSTALL_DIR" && git pull
 else
   echo "[spotlight] Installing to $INSTALL_DIR ..."
-  git clone https://github.com/YOUR_USERNAME/spotlight.git "$INSTALL_DIR"
+  git clone https://github.com/nicklai12/spotlight-review.git "$INSTALL_DIR"
 fi
 
 # Step 2: install Python dependencies
