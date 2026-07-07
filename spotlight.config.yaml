@@ -2,3 +2,4 @@ model: "gpt-4o-mini"
 language: "zh-TW"
 history_lines: 50
 output: "stdout"
+max_files_limit: 50
