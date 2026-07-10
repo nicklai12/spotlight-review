@@ -3,3 +3,5 @@ language: "zh-TW"
 history_lines: 50
 output: "stdout"
 max_files_limit: 50
+claude_session_dir: "~/.claude/projects"
+max_session_lines: 5000

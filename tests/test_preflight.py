@@ -13,20 +13,20 @@ def _make_mock(returncode=0, stdout="", stderr=""):
     return result
 
 
-def test_preflight_passes_valid_environment(monkeypatch):
+def test_preflight_passes_valid_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    session_dir = tmp_path / ".claude" / "projects"
+    session_dir.mkdir(parents=True)
+    (session_dir / "session_20260617.jsonl").write_text("{}\n" * 10)
 
     def fake_run(args, **kwargs):
         if args == ["git", "rev-parse", "--git-dir"]:
             return _make_mock(returncode=0)
-        if args == ["git", "diff", "HEAD"]:
-            return _make_mock(stdout="some diff content")
-        if args == ["git", "diff", "HEAD", "--name-only"]:
-            return _make_mock(stdout="\n".join(f"src/file{i}.py" for i in range(49)))
         return _make_mock()
 
+    config = {"claude_session_dir": str(session_dir), "max_session_lines": 5000}
     with patch("agents.preflight.subprocess.run", side_effect=fake_run):
-        assert preflight({"max_files_limit": 50}) is None
+        assert preflight(config) is None
 
 
 def test_preflight_fails_not_in_git_repo(monkeypatch):
@@ -55,19 +55,34 @@ def test_preflight_fails_no_api_key(monkeypatch):
             preflight({"max_files_limit": 50})
 
 
-def test_preflight_fails_too_many_files(monkeypatch):
+def test_preflight_fails_session_too_large(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    files = [f"src/file{i}.py" for i in range(51)]
+    session_dir = tmp_path / ".claude" / "projects"
+    session_dir.mkdir(parents=True)
+    (session_dir / "session_20260617.jsonl").write_text("{}\n" * 5001)
 
     def fake_run(args, **kwargs):
         if args == ["git", "rev-parse", "--git-dir"]:
             return _make_mock(returncode=0)
-        if args == ["git", "diff", "HEAD"]:
-            return _make_mock(stdout="some diff content")
-        if args == ["git", "diff", "HEAD", "--name-only"]:
-            return _make_mock(stdout="\n".join(files))
         return _make_mock()
 
+    config = {"claude_session_dir": str(session_dir), "max_session_lines": 5000}
     with patch("agents.preflight.subprocess.run", side_effect=fake_run):
-        with pytest.raises(ValueError, match="limit: 50"):
-            preflight({"max_files_limit": 50})
+        with pytest.raises(ValueError, match="too large"):
+            preflight(config)
+
+
+def test_preflight_fails_not_found_session(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    session_dir = tmp_path / ".claude" / "projects"
+    session_dir.mkdir(parents=True)
+
+    def fake_run(args, **kwargs):
+        if args == ["git", "rev-parse", "--git-dir"]:
+            return _make_mock(returncode=0)
+        return _make_mock()
+
+    config = {"claude_session_dir": str(session_dir), "max_session_lines": 5000}
+    with patch("agents.preflight.subprocess.run", side_effect=fake_run):
+        with pytest.raises(ValueError, match="session files"):
+            preflight(config)
