@@ -7,13 +7,13 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-
 from agents.audit import audit
-from agents.collect import collect
+from agents.collect_session import collect_session
 from agents.format import format_output
 from agents.logger import get_weekly_stats, log_run
-from agents.parse import parse
+from agents.parse_events import parse_events
 from agents.preflight import preflight
+from agents.risk_flag import risk_flag
 from agents.summarize import summarize
 from agents.triage import triage
 
@@ -57,11 +57,11 @@ def main():
     except Exception as e:
         _fail(run_id, "preflight", e)
     with _step(run_id, "collect"):
-        collect_output = collect()
+        collect_output = collect_session()
     with _step(run_id, "parse"):
-        parse_output = parse(collect_output)
-    files_changed = len(parse_output["files_changed"])
-    lines_delta = parse_output["lines_added"] + parse_output["lines_removed"]
+        parse_output = parse_events(collect_output)
+    files_changed = len(parse_output["files_written"])
+    lines_delta = parse_output.get("lines_added", 0) + parse_output.get("lines_removed", 0)
     log_run(_base(run_id, status="running", step="triage", files_changed=files_changed, lines_delta=lines_delta))
     triage_result = triage(parse_output)
     if triage_result["verdict"] == "skip":
@@ -72,10 +72,13 @@ def main():
         print(json.dumps(parse_output, ensure_ascii=False, indent=2))
         sys.exit(0)
     verdict = triage_result["verdict"]
+    log_run(_base(run_id, status="running", step="risk_flag", files_changed=files_changed, lines_delta=lines_delta))
+    risk_output = risk_flag(parse_output)
+    if risk_output["risk_level"] == "high": print("[spotlight] ⚠️  High risk session detected. Review carefully.", file=sys.stderr)
     with _step(run_id, "summarize", verdict=verdict, files_changed=files_changed, lines_delta=lines_delta):
-        summarize_output = summarize(parse_output, model=config["model"])
+        summarize_output = summarize(parse_output, model=config["model"], risk_output=risk_output)
     with _step(run_id, "audit", verdict=verdict, files_changed=files_changed, lines_delta=lines_delta, audit_passed=False):
-        audit(collect_output, parse_output, summarize_output)
+        audit(collect_output, parse_output, summarize_output, risk_output=risk_output)
     markdown = format_output(summarize_output, parse_output)
     if verdict == "warn":
         markdown = f"> ⚠️  {triage_result['reason']}\n\n" + markdown
