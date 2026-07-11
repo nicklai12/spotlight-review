@@ -1,11 +1,12 @@
 # Spotlight Review
 
-Spotlight Review 是一個命令列工具，用來自動摘要最近的 Claude Code session。它會讀取 `~/.claude/projects/` 下的 session log（`.jsonl`），透過 LLM 產生繁體中文的 agent 行為報告，並以 Markdown 格式輸出。
+Spotlight Review 是一個命令列工具，用來自動摘要最近的 AI coding session。它支援 Claude Code、Codex CLI 與 Cursor，透過統一的 adapter 介面讀取各工具的 session，再由 LLM 產生繁體中文的 agent 行為報告，並以 Markdown 格式輸出。
 
 ## 功能
 
-- 啟動前護欄：檢查 git repo、OPENAI_API_KEY、Claude session 目錄與單一 session 大小上限
-- 自動收集最新的 Claude Code session log
+- 啟動前護欄：檢查 git repo、OPENAI_API_KEY、session 目錄與單一 session 大小上限
+- 自動偵測或手動指定 AI coding session 來源（Claude Code / Codex CLI / Cursor）
+- 透過 `agents/sources/` 的統一 adapter 介面收集與轉換 session 資料
 - 解析 session 事件：讀取/修改的檔案、執行的 bash 指令、工具呼叫次數、對話輪數、session 時長
 - 規則式風險標記：`risk_flag()` 根據敏感路徑、破壞性指令、權限提升、範圍外存取等產生 flags
 - 風險審計：`audit()` 檢查 high risk session 的 LLM 摘要是否遺漏風險
@@ -31,9 +32,13 @@ export OPENAI_API_KEY=your_key_here
 然後在任意 git repo 執行：
 
 ```bash
-spotlight           # 產生完整 Markdown 報告
-spotlight --dry-run # 執行到解析與風險標記，不呼叫 LLM
-spotlight --stats   # 顯示最近 7 天統計
+spotlight                       # 自動偵測來源，產生完整 Markdown 報告
+spotlight --source claude_code  # 指定使用 Claude Code
+spotlight --source codex        # 指定使用 Codex CLI
+spotlight --source cursor       # 指定使用 Cursor
+spotlight --session /path/to/session.jsonl --source claude_code  # 直接指定 session 檔案
+spotlight --dry-run             # 執行到解析與風險標記，不呼叫 LLM
+spotlight --stats               # 顯示最近 7 天統計
 ```
 
 ## 使用方法
@@ -89,21 +94,24 @@ Common failure:   None
 `spotlight.config.yaml` 控制工具行為：
 
 ```yaml
+source: "auto"                    # 自動偵測來源：auto / claude_code / codex / cursor
 model: "gpt-4o-mini"              # 使用的 OpenAI 模型
 language: "zh-TW"                 # 輸出語言
-claude_session_dir: "~/.claude/projects"  # Claude session log 目錄
+claude_session_dir: "~/.claude/projects"  # Claude Code session log 目錄
+codex_session_dir: "~/.codex/sessions"    # Codex CLI session log 目錄
+cursor_workspace_dir: null        # Cursor workspaceStorage 目錄；null 會依 OS 自動偵測
 max_session_lines: 5000           # 單一 session 檔案行數上限
 ```
 
-目前 `model` 會傳入 `summarize()`，`claude_session_dir` 與 `max_session_limit` 會傳入 `preflight()`，其他欄位保留給未來擴充。
+`model` 會傳入 `summarize()`，`claude_session_dir` / `codex_session_dir` / `cursor_workspace_dir` 與 `max_session_lines` 會傳入 `preflight()` 與 `collect_session()`，`source` 控制 `collect_session()` 要使用的 adapter。
 
 ## 流水線說明
 
 Spotlight 依以下 SOP 順序執行：
 
 1. 初始化 `run_id`
-2. `preflight()` — 檢查 git repo、API key、Claude session 目錄與 session 大小；失敗則 exit `1`
-3. `collect_session()` — 收集最新的 Claude Code session log
+2. `preflight()` — 檢查 git repo、API key、session 目錄與 session 大小；失敗則 exit `1`
+3. `collect_session()` — 根據 `source` 設定或自動偵測，呼叫對應的 source adapter 收集最新 session
 4. `parse_events()` — 解析 session 事件，產出 Schema 2（含 `files_read`、`files_written`、`bash_commands` 等）與相容用的 Schema 1（`files_changed`、`lines_added`、`lines_removed`）
 5. `triage()` — 評估複雜度，產生 `auto` / `warn` / `skip` 建議
    - `skip`：印出原因並以 exit `0` 結束（非錯誤）
@@ -149,7 +157,12 @@ python -m pytest
 ```
 spotlight-review/
 ├── agents/                # 各階段 agent（不應在此寫控制邏輯）
-│   ├── collect_session.py # 收集最新 Claude Code session log
+│   ├── sources/           # 各 AI 工具的 source adapter
+│   │   ├── base.py        # 統一 adapter 介面 BaseSourceAdapter
+│   │   ├── claude_code.py # Claude Code adapter
+│   │   ├── codex_cli.py   # Codex CLI adapter
+│   │   └── cursor.py      # Cursor adapter
+│   ├── collect_session.py # 來源分發器：自動偵測或依設定呼叫 adapter
 │   ├── parse_events.py    # 解析 session 事件
 │   ├── risk_flag.py       # 規則式風險標記
 │   ├── summarize.py       # LLM 摘要
@@ -171,6 +184,7 @@ spotlight-review/
 ## 注意事項
 
 - 需要在 git repository 內執行。
+- `source: "auto"` 會依以下順序偵測：Claude Code（`~/.claude/projects/` 有 `.jsonl`）→ Codex CLI（`~/.codex/sessions/` 有 `.jsonl`）→ Cursor（workspace DB 存在）。
 - 單一 session 檔案行數超過 `max_session_lines` 時，`preflight()` 會失敗。
 - session 包含 migration/schema 路徑或大量檔案時，`triage()` 會建議 `skip` 或 `warn`。
 - `lines_added` / `lines_removed` 是從 `Write` / `Edit` 工具輸入估算的近似值，不是 git diff 精確值。

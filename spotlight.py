@@ -42,6 +42,12 @@ def _step(run_id, step, **kwargs):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--source",
+                        choices=["auto", "claude_code", "codex", "cursor"],
+                        default="auto",
+                        help="Session source (default: auto-detect)")
+    parser.add_argument("--session", dest="session_path",
+                        help="Direct path to session file")
     if "--stats" in sys.argv:
         s = get_weekly_stats()
         print(f"Spotlight — Last 7 Days\n───────────────────────\nTotal runs:       {s['total_runs']}\nCompleted:        {s['completed_runs']}\nFailed:           {s['failed_runs']}\nSkipped:          {s['skipped_runs']}\nAudit pass rate:  {s['audit_pass_rate']:.0%}\nAvg files/run:    {s['avg_files_changed']:.1f}\nCommon failure:   {s['most_common_failure'] or 'None'}\n")
@@ -57,7 +63,8 @@ def main():
     except Exception as e:
         _fail(run_id, "preflight", e)
     with _step(run_id, "collect"):
-        collect_output = collect_session()
+        collect_output = collect_session(source=args.source, config=config,
+                                         session_path=args.session_path)
     with _step(run_id, "parse"):
         parse_output = parse_events(collect_output)
     files_changed = len(parse_output["files_written"])

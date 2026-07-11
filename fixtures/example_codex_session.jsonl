@@ -1,0 +1,8 @@
+{"type": "user_message", "content": "請幫我重構 src/utils.py，把重複的邏輯提取成函式", "timestamp": "2026-06-17T10:00:00"}
+{"type": "assistant_message", "content": "好的，我先讀一下目前的 utils.py 和相關測試檔案", "timestamp": "2026-06-17T10:00:05"}
+{"type": "tool_call", "tool_name": "read_file", "input": {"path": "src/utils.py"}, "timestamp": "2026-06-17T10:00:10"}
+{"type": "assistant_message", "content": "我看到有兩段重複的日期格式化與 slug 處理邏輯，我把它們抽出到新的 helpers 模組", "timestamp": "2026-06-17T10:00:15"}
+{"type": "tool_call", "tool_name": "write_file", "input": {"path": "src/helpers.py", "content": "from datetime import datetime, timezone\n\ndef format_timestamp(ts):\n    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()\n\ndef slugify(text):\n    return text.lower().strip().replace(\" \", \"-\")\n"}, "timestamp": "2026-06-17T10:00:20"}
+{"type": "user_message", "content": "幫我執行測試", "timestamp": "2026-06-17T10:00:25"}
+{"type": "tool_call", "tool_name": "shell", "input": {"cmd": "python -m pytest tests/"}, "timestamp": "2026-06-17T10:00:30"}
+{"type": "token_count", "total_tokens": 1234}
