@@ -1,7 +1,10 @@
+source: "auto"       # auto / claude_code / codex / cursor
 model: "gpt-4o-mini"
 language: "zh-TW"
 history_lines: 50
 output: "stdout"
 max_files_limit: 50
 claude_session_dir: "~/.claude/projects"
+codex_session_dir: "~/.codex/sessions"
+cursor_workspace_dir: null  # null = 自動偵測
 max_session_lines: 5000
