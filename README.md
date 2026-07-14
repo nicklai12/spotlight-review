@@ -1,6 +1,6 @@
 # Spotlight Review
 
-Spotlight Review 是一個命令列工具，用來自動摘要最近的 AI coding session。它支援 Claude Code、Codex CLI 與 Cursor，透過統一的 adapter 介面讀取各工具的 session，再由 LLM 產生繁體中文的 agent 行為報告，並以 Markdown 格式輸出。
+把 Claude / Codex / Cursor 的 agent session 轉成可審計的繁中交接報告：做了什麼、風險是什麼、下一步該做什麼。
 
 ## 功能
 
@@ -14,6 +14,44 @@ Spotlight Review 是一個命令列工具，用來自動摘要最近的 AI codin
 - 輸出結構化的 Markdown 報告（Summary / Changes / Risks / Next Actions / Questions / Files Touched）
 - 執行日誌：每次執行狀態寫入 `~/.spotlight/runs.jsonl`
 - 週統計：`spotlight --stats` 顯示最近 7 天執行概況
+
+## Data handling
+
+Spotlight 的設計原則是：**你的 session 內容盡量留在本機，能少送就少送**。
+
+### 讀取哪些本機檔案
+
+只讀取各 AI coding 工具寫在本機的 session log，不讀取原始程式碼內容：
+
+- **Claude Code**：`~/.claude/projects/**/*.jsonl`
+- **Codex CLI**：`~/.codex/sessions/**/*.jsonl`
+- **Cursor**：`~/Library/Application Support/Cursor/User/workspaceStorage/**/state.vscdb`（macOS）或 `~/.config/Cursor/User/workspaceStorage/**/state.vscdb`（Linux）
+
+### 傳送哪些內容到 LLM
+
+`summarize()` 前**不會**傳送完整原始 session log。只會傳送結構化後的摘要欄位：
+
+- 讀取/修改的檔案路徑（`files_read`、`files_written`）
+- 前 20 條 bash 指令（`bash_commands`）
+- 工具呼叫次數、對話輪數、session 時長
+- `risk_flag()` 產生的風險等級與標記項目
+- 前 5 則 assistant 訊息節錄（每則最多 500 字元）
+
+### 遮罩與注意事項
+
+- Spotlight **不會主動遮罩 credential、token 或密碼**。如果你的 bash 指令或 assistant 訊息中含有敏感值，它們仍可能隨著上述欄位被傳送。
+- 建議在執行前先用 `spotlight --dry-run` 查看會被傳送的內容，確認沒有敏感資訊後再跑完整流程。
+
+### 本機保留哪些紀錄
+
+每次執行會寫入 `~/.spotlight/runs.jsonl`，內容僅包含：
+
+- `run_id`（ISO 時間戳）
+- 執行狀態：`started` / `running` / `completed` / `failed` / `skipped`
+- 目前步驟、`verdict`、`files_changed`、`lines_delta`
+- `audit_passed` 與錯誤訊息
+
+**不會**儲存原始 session 內容、檔案路徑、bash 指令或 LLM 原始輸出。
 
 ## 安裝
 
@@ -142,6 +180,49 @@ Spotlight 依以下 SOP 順序執行：
 
 ```markdown
 > ⚠️  Large or complex diff. Summary may be incomplete.
+```
+
+## 輸出範例
+
+```markdown
+## Summary
+
+本次 session 針對用戶註冊流程重構：將密碼驗證邏輯從 `views.py` 抽離到 `validators.py`，
+並新增 `UserService.register()` 的單元測試。整體範圍明確，變更集中在 auth 模組。
+
+## Changes
+
+- 新增 `app/auth/validators.py`，內含 `validate_password_strength()` 與 `validate_email_format()`。
+- 重構 `app/auth/views.py`：移除內嵌驗證邏輯，改呼叫新的 validator functions。
+- 更新 `app/auth/services.py` 的 `UserService.register()`，統一使用新 validator。
+- 新增 `tests/auth/test_validators.py` 與 `tests/auth/test_services.py` 共 14 個測試案例。
+- 執行 `pytest tests/auth/` 確認全部通過。
+
+## Risks
+
+- [WARN] `scope_creep`: Agent 讀取了工作目錄外的檔案：`/Users/alice/.ssh/config`
+- [WARN] `permission_escalation`: Agent 使用了需要權限提升的指令：`sudo systemctl restart postgres`
+
+## Next Actions
+
+- [ ] 審閱 `app/auth/views.py` 的重構是否遺漏邊界條件。
+- [ ] 確認 `sudo systemctl restart postgres` 是否為必要操作。
+- [ ] 檢查 `.ssh/config` 被讀取的原因，必要時移除該次存取權限。
+
+## Questions
+
+- `validators.py` 的錯誤訊息是否已納入 i18n 處理？
+- 密碼強度規則是否與現行資安政策一致？
+
+## Files Touched
+
+- `app/auth/validators.py` (written)
+- `app/auth/views.py` (written)
+- `app/auth/services.py` (written)
+- `tests/auth/test_validators.py` (written)
+- `tests/auth/test_services.py` (written)
+
+468++ / 192-- across 5 file(s)
 ```
 
 ## 開發與測試
