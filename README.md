@@ -181,6 +181,24 @@ spotlight-review/
 └── install.sh             # 一鍵安裝腳本
 ```
 
+## 疑難排解
+
+### 安裝時出現 `fatal: not a git repository`
+
+如果執行一鍵安裝指令後看到：
+
+```text
+[spotlight] Updating existing installation...
+fatal: not a git repository (or any of the parent directories): .git
+```
+
+表示 `~/.spotlight` 目錄已經存在，但它不是一個 Git 倉庫。最簡單的解決方式是刪除現有目錄後重新安裝：
+
+```bash
+rm -rf ~/.spotlight
+curl -sSL https://raw.githubusercontent.com/nicklai12/spotlight-review/main/install.sh | bash
+```
+
 ## 注意事項
 
 - 需要在 git repository 內執行。
