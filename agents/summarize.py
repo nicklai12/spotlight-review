@@ -6,6 +6,24 @@ import os
 import openai
 
 
+FORMAT_HINTS = {
+    "pr": """
+額外指示（此輸出將用於 Pull Request 描述）：
+- next_actions 欄位請改寫為「Reviewer 在 approve 前應該確認的事項」
+  格式範例：「確認 _validate_input() 函式有對應的測試」
+- risks 欄位請特別標注任何可能影響正式環境的行為
+- summary 欄位請寫成 PR 的一句話描述（動詞開頭，例如「重構 utils.py...」）
+""",
+    "handoff": """
+額外指示（此輸出將用於工作交接文件）：
+- next_actions 欄位請改寫為「接手人應該確認或繼續做的事項」
+- questions 欄位請特別標注任何「接手人開始工作前必須先釐清」的問題
+- summary 欄位請寫成能讓陌生人理解脈絡的一句話說明
+""",
+    "markdown": ""  # 無額外指示，維持現有行為
+}
+
+
 def _format_flags(risk_output: dict) -> str:
     if not risk_output or not risk_output.get("flags"):
         return "無"
@@ -15,8 +33,9 @@ def _format_flags(risk_output: dict) -> str:
     )
 
 
-def summarize(parse_output: dict, model: str = "gpt-4o-mini", risk_output: dict | None = None) -> dict:
+def summarize(parse_output: dict, model: str = "gpt-4o-mini", risk_output: dict | None = None, format_hint: str = "markdown") -> dict:
     client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    format_hint_text = FORMAT_HINTS.get(format_hint, "")
 
     system_prompt = (
         "你是一個 coding session 分析助手，專門幫助開發者理解 AI coding agent 做了什麼。\n"
@@ -61,6 +80,7 @@ Session 時長：{parse_output["duration_seconds"]} 秒
     "agent 有意義地讀取或修改的檔案路徑（用於驗證）"
   ]
 }}
+{format_hint_text}
 """
 
     response = client.chat.completions.create(
