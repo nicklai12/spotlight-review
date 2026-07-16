@@ -11,7 +11,7 @@
 - 規則式風險標記：`risk_flag()` 根據敏感路徑、破壞性指令、權限提升、範圍外存取等產生 flags
 - 風險審計：`audit()` 檢查 high risk session 的 LLM 摘要是否遺漏風險
 - 使用 OpenAI 模型產生 agent 行為摘要
-- 輸出結構化的 Markdown 報告（Summary / Changes / Risks / Next Actions / Questions / Files Touched）
+- 輸出結構化的 Markdown 報告，並支援 `--format pr`（GitHub PR 描述）與 `--format handoff`（工作交接備忘錄）
 - 執行日誌：每次執行狀態寫入 `~/.spotlight/runs.jsonl`
 - 週統計：`spotlight --stats` 顯示最近 7 天執行概況
 
@@ -75,6 +75,8 @@ spotlight --source claude_code  # 指定使用 Claude Code
 spotlight --source codex        # 指定使用 Codex CLI
 spotlight --source cursor       # 指定使用 Cursor
 spotlight --session /path/to/session.jsonl --source claude_code  # 直接指定 session 檔案
+spotlight --format pr           # 輸出 GitHub PR 描述格式
+spotlight --format handoff      # 輸出工作交接備忘錄格式
 spotlight --dry-run             # 執行到解析與風險標記，不呼叫 LLM
 spotlight --stats               # 顯示最近 7 天統計
 ```
@@ -159,13 +161,19 @@ Spotlight 依以下 SOP 順序執行：
    - 若 `risk_level == "high"`，會在 `stderr` 印出 ⚠️ 警告，但不中斷流程
 8. `summarize()` — 把 `parse_output` 與 `risk_output` 送進 LLM，產生 JSON，欄位包含 `summary`、`changes`、`risks`、`next_actions`、`questions`、`files_touched`
 9. `audit()` — 驗證必填欄位、比對 `files_touched` 與實際檔案防幻覺、檢查 `changes` 項目品質，並確認 high risk session 的 `risks` 不為空
-10. `format_output()` — 格式化為 Markdown
+10. `format_output()` / `format_pr()` / `format_handoff()` — 根據 `--format` 參數格式化為對應輸出
 
 每個關鍵步驟都會透過 `log_run()` 寫入 `~/.spotlight/runs.jsonl`。任何非預期失敗都會印出錯誤訊息到 `stderr`，並以 exit code `1` 結束。
 
 ## 輸出格式
 
-最終 Markdown 報告包含以下區塊：
+`--format` 決定最終輸出樣式（預設為 `markdown`）：
+
+- `markdown`：預設的繁中審計報告（Summary / Changes / Risks / Next Actions / Questions / Files Touched）。
+- `pr`：GitHub PR 描述格式，包含 `# [feat]` 標題、`Risk Flags 🚩`、`Reviewer Checklist ✅` 與 `Open Questions ❓`。
+- `handoff`：工作交接備忘錄格式，適合貼入 Notion / HackMD。
+
+以下為 `markdown` 預設輸出範例：
 
 - **Summary** – 整個 session 的簡短概述
 - **Changes** – agent 具體執行的操作
@@ -231,7 +239,7 @@ Spotlight 依以下 SOP 順序執行：
 python -m pytest
 ```
 
-測試位於 `tests/`，涵蓋 `collect_session`、`parse_events`、`risk_flag`、`summarize`、`audit`、`preflight`、`triage`、`logger` 等 agent。
+測試位於 `tests/`，涵蓋 `collect_session`、`parse_events`、`risk_flag`、`summarize`、`audit`、`preflight`、`triage`、`logger`、`format` 等 agent。
 
 ## 專案結構
 

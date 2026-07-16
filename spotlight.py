@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 from agents.audit import audit
 from agents.collect_session import collect_session
-from agents.format import format_output
+from agents.format import format_output, format_pr, format_handoff
 from agents.logger import get_weekly_stats, log_run
 from agents.parse_events import parse_events
 from agents.preflight import preflight
@@ -46,6 +46,7 @@ def main():
                         choices=["auto", "claude_code", "codex", "cursor"],
                         default="auto",
                         help="Session source (default: auto-detect)")
+    parser.add_argument("--format", choices=["markdown", "pr", "handoff"], default="markdown", help="Output format: markdown (default), pr, or handoff")
     parser.add_argument("--session", dest="session_path",
                         help="Direct path to session file")
     if "--stats" in sys.argv:
@@ -83,14 +84,14 @@ def main():
     risk_output = risk_flag(parse_output)
     if risk_output["risk_level"] == "high": print("[spotlight] ⚠️  High risk session detected. Review carefully.", file=sys.stderr)
     with _step(run_id, "summarize", verdict=verdict, files_changed=files_changed, lines_delta=lines_delta):
-        summarize_output = summarize(parse_output, model=config["model"], risk_output=risk_output)
+        summarize_output = summarize(parse_output, model=config["model"], risk_output=risk_output, format_hint=args.format)
     with _step(run_id, "audit", verdict=verdict, files_changed=files_changed, lines_delta=lines_delta, audit_passed=False):
         audit(collect_output, parse_output, summarize_output, risk_output=risk_output)
-    markdown = format_output(summarize_output, parse_output)
+    output = format_pr(summarize_output, parse_output, risk_output) if args.format == "pr" else format_handoff(summarize_output, parse_output, risk_output) if args.format == "handoff" else format_output(summarize_output, parse_output)
     if verdict == "warn":
-        markdown = f"> ⚠️  {triage_result['reason']}\n\n" + markdown
+        output = f"> ⚠️  {triage_result['reason']}\n\n" + output
     log_run(_base(run_id, status="completed", step="done", verdict=verdict, files_changed=files_changed, lines_delta=lines_delta, audit_passed=True))
-    print(markdown)
+    print(output)
 
 
 if __name__ == "__main__":
